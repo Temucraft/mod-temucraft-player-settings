@@ -1,0 +1,100 @@
+[worldserver]
+
+###################################################################################################
+# mod-temucraft-player-settings
+#
+# Every player picks his own rates and options in one window: .temucraft settings
+# A value can be saved for the account or only for one character. A character uses its own value, then the
+# account's, then the server's (worldserver.conf). Rates are relative to the server's: picking 2 while the server
+# runs 1 gives twice the normal amount.
+###################################################################################################
+
+#
+#    Temucraft.PlayerSettings.Enable
+#        Description: Turn the settings window and every player choice on or off.
+#        Default:     1
+
+Temucraft.PlayerSettings.Enable = 1
+
+#
+#    Temucraft.PlayerSettings.XP.Max
+#        Description: Highest kill, quest, dungeon finder quest, exploration and pet experience rate a player can pick
+#                     (the lowest is 0). Players can also turn experience off completely.
+#        Default:     3
+
+Temucraft.PlayerSettings.XP.Max = 3
+
+#
+#    Temucraft.PlayerSettings.XP.Battleground.Max
+#        Description: Highest battleground kill experience rate a player can pick, for each battleground (lowest 0).
+#        Default:     3
+
+Temucraft.PlayerSettings.XP.Battleground.Max = 3
+
+#
+#    Temucraft.PlayerSettings.Reputation.Max
+#        Description: Highest reputation gain rate a player can pick (lowest 0). Reputation is account-wide.
+#        Default:     2
+
+Temucraft.PlayerSettings.Reputation.Max = 2
+
+#
+#    Temucraft.PlayerSettings.Rest.InGame.Default
+#    Temucraft.PlayerSettings.Rest.InGame.Recommended
+#    Temucraft.PlayerSettings.Rest.Offline.InTavernOrCity.Default
+#    Temucraft.PlayerSettings.Rest.Offline.InTavernOrCity.Recommended
+#    Temucraft.PlayerSettings.Rest.Offline.InWilderness.Default
+#    Temucraft.PlayerSettings.Rest.Offline.InWilderness.Recommended
+#    Temucraft.PlayerSettings.Rest.MaxBonus.Default
+#    Temucraft.PlayerSettings.Rest.MaxBonus.Recommended
+#        Description: Players pick a rested experience rate between Default and Recommended. MaxBonus is how many
+#                     levels of rested experience can be stored. A player who never picks gets the server's
+#                     Rate.Rest.* values.
+#        Default:     1 / 2, 1 / 2, 1 / 2, 1.5 / 1.5
+
+Temucraft.PlayerSettings.Rest.InGame.Default = 1
+Temucraft.PlayerSettings.Rest.InGame.Recommended = 2
+Temucraft.PlayerSettings.Rest.Offline.InTavernOrCity.Default = 1
+Temucraft.PlayerSettings.Rest.Offline.InTavernOrCity.Recommended = 2
+Temucraft.PlayerSettings.Rest.Offline.InWilderness.Default = 1
+Temucraft.PlayerSettings.Rest.Offline.InWilderness.Recommended = 2
+Temucraft.PlayerSettings.Rest.MaxBonus.Default = 1.5
+Temucraft.PlayerSettings.Rest.MaxBonus.Recommended = 1.5
+
+#
+#    Temucraft.PlayerSettings.Health.Default / .Recommended
+#    Temucraft.PlayerSettings.Mana.Default / .Recommended
+#    Temucraft.PlayerSettings.Rage.Loss.Default / .Recommended
+#    Temucraft.PlayerSettings.RunicPower.Loss.Default / .Recommended
+#        Description: Players pick a health and mana regeneration rate, and a rage and runic power loss rate out of
+#                     combat, between Default and Recommended. A player who never picks gets the server's Rate.*.
+#                     Energy, focus and rage/runic power income are not offered: changing them changes damage.
+#        Default:     1 / 2, 1 / 1.5, 1 / 0.5, 1 / 0.5
+
+Temucraft.PlayerSettings.Health.Default = 1
+Temucraft.PlayerSettings.Health.Recommended = 2
+Temucraft.PlayerSettings.Mana.Default = 1
+Temucraft.PlayerSettings.Mana.Recommended = 1.5
+Temucraft.PlayerSettings.Rage.Loss.Default = 1
+Temucraft.PlayerSettings.Rage.Loss.Recommended = 0.5
+Temucraft.PlayerSettings.RunicPower.Loss.Default = 1
+Temucraft.PlayerSettings.RunicPower.Loss.Recommended = 0.5
+
+#
+#    Temucraft.PlayerSettings.Regen.Spell1
+#    Temucraft.PlayerSettings.Regen.Spell2
+#        Description: The hidden server-side spells that carry the regeneration choices (data/sql/db-world).
+#        Default:     1269900, 1269901
+
+Temucraft.PlayerSettings.Regen.Spell1 = 1269900
+Temucraft.PlayerSettings.Regen.Spell2 = 1269901
+
+#
+#    Temucraft.PlayerSettings.WorldChannel.Enable
+#    Temucraft.PlayerSettings.WorldChannel.Name
+#        Description: Join players to this chat channel at login (they can turn it off in the window).
+#                     For one channel shared by both factions set AllowTwoSide.Interaction.Channel = 1.
+#        Default:     1, World
+
+Temucraft.PlayerSettings.WorldChannel.Enable = 1
+Temucraft.PlayerSettings.WorldChannel.Name = World
