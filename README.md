@@ -13,9 +13,8 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 | Regeneration | Health and mana regeneration, rage and runic power loss out of combat | Blizzard's default to our recommended value |
 | Main | Reputation gain | 0 to 2 |
 | Main | Spell pushback | Server default, Vanilla/TBC, Wrath, Retail (no pushback) |
-| Main | Release at the nearest friendly or neutral graveyard | on / off |
 | Main | Join the World channel at login | on / off |
-| Main (while dead) | Go to the nearest friendly or neutral graveyard now | button (also `.temucraft graveyard`) |
+| Main | Go to the nearest graveyard | button (also `.temucraft graveyard`); alive or dead, anywhere by default (conf) |
 
 - **Account or character:** the top line of the window says where changes are saved. A character uses its own value,
   then the account's, then the server's. Every line shows the value in use and where it comes from.
@@ -32,8 +31,9 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 - Regeneration: two hidden passive server-side spells (1269900, 1269901) whose amounts are the percent change.
 - Reputation: gains (not losses) are scaled in `OnPlayerReputationChange`.
 - Spell pushback: the choice is stored on the player and read by mod-temucraft-classes (`TemucraftPlayerSettings.h`).
-- Graveyards: the nearest graveyard on the same map that `graveyard_zone` links to the player's faction or to both.
-  Only in the open world (not in instances, battlegrounds or arenas).
+- Graveyard button: the nearest graveyard on the same map that `graveyard_zone` links to the player's faction or to
+  both; where there is none (most instances), the graveyard the core would use. `Temucraft.PlayerSettings.Graveyard.*`
+  decides alive / dead / anywhere and a cooldown. Alive players can't use it in combat, flying or on a transport.
 - World channel: joined at login. Set `AllowTwoSide.Interaction.Channel = 1` so both factions share it.
 
 ## Install

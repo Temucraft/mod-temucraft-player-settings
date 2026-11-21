@@ -90,6 +90,31 @@ Temucraft.PlayerSettings.Regen.Spell1 = 1269900
 Temucraft.PlayerSettings.Regen.Spell2 = 1269901
 
 #
+#    Temucraft.PlayerSettings.Graveyard.Alive
+#    Temucraft.PlayerSettings.Graveyard.Dead
+#        Description: When the "Go to the nearest graveyard" button (and .temucraft graveyard) works: while alive,
+#                     while dead, or both. Alive players can't use it in combat, while flying or on a transport.
+#        Default:     1, 1
+
+Temucraft.PlayerSettings.Graveyard.Alive = 1
+Temucraft.PlayerSettings.Graveyard.Dead = 1
+
+#
+#    Temucraft.PlayerSettings.Graveyard.Anywhere
+#        Description: 1 = also in instances, battlegrounds and arenas (from an instance it goes to the graveyard the
+#                     core would use, usually outside the entrance). 0 = open world only.
+#        Default:     1
+
+Temucraft.PlayerSettings.Graveyard.Anywhere = 1
+
+#
+#    Temucraft.PlayerSettings.Graveyard.Cooldown
+#        Description: Seconds between uses of the graveyard button (0 = no cooldown).
+#        Default:     0
+
+Temucraft.PlayerSettings.Graveyard.Cooldown = 0
+
+#
 #    Temucraft.PlayerSettings.WorldChannel.Enable
 #    Temucraft.PlayerSettings.WorldChannel.Name
 #        Description: Join players to this chat channel at login (they can turn it off in the window).

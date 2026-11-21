@@ -14,7 +14,8 @@
 //   Regeneration     health and mana regeneration, rage and runic power loss out of combat (default to recommended).
 //   Reputation       reputation gain (0 to 2).
 //   Spell pushback   server default, Vanilla/TBC, Wrath or Retail (no pushback). Read by mod-temucraft-classes.
-//   Graveyard        always release at the nearest friendly or neutral graveyard, and a button to go there now.
+//   Graveyard        a button that takes you to the nearest friendly or neutral graveyard (alive or dead; the
+//                    server decides where and when it works: Temucraft.PlayerSettings.Graveyard.*).
 //   World channel    join the cross-faction World channel at login.
 //
 // A value can be saved for the whole account or only for this character. A character uses its own value, then the
@@ -29,6 +30,7 @@
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "GameGraveyard.h"
+#include "GameTime.h"
 #include "GossipDef.h"
 #include "Group.h"
 #include "Map.h"
@@ -66,7 +68,7 @@ namespace
         S_BG_AV, S_BG_WSG, S_BG_AB, S_BG_EOTS, S_BG_SOTA, S_BG_IC,
         S_REST_INGAME, S_REST_TAVERN, S_REST_WILD, S_REST_MAX,
         S_REGEN_HEALTH, S_REGEN_MANA, S_RAGE_LOSS, S_RUNIC_LOSS,
-        S_REP_GAIN, S_PUSHBACK, S_GRAVEYARD, S_WORLD_CHANNEL,
+        S_REP_GAIN, S_PUSHBACK, S_WORLD_CHANNEL,
         S_COUNT
     };
 
@@ -105,7 +107,6 @@ namespace
         { "runic_loss",    "Runic power loss out of combat",        KIND_NUMBER, PAGE_REGEN, 39 },
         { "rep_gain",      "Reputation gain",                       KIND_NUMBER, PAGE_MAIN,  40 },
         { "pushback",      "Spell pushback",                        KIND_CHOICE, PAGE_MAIN,  41 },
-        { "graveyard",     "Release at the nearest friendly or neutral graveyard", KIND_TOGGLE, PAGE_MAIN, 42 },
         { "world_channel", "Join the World channel at login",       KIND_TOGGLE, PAGE_MAIN,  43 },
     } };
 
@@ -126,6 +127,10 @@ namespace
         std::string worldChannelName = "World";
         uint32 regenHealthSpell = 1269900;
         uint32 regenPowerSpell = 1269901;
+        bool graveyardAlive = true;      // the graveyard button works while alive
+        bool graveyardDead = true;       // ... and while dead
+        bool graveyardAnywhere = true;   // also in instances, battlegrounds and arenas (otherwise open world only)
+        uint32 graveyardCooldown = 0;    // seconds between uses (0 = none)
         std::array<Range, S_COUNT> ranges;
     } cfg;
 
@@ -156,7 +161,6 @@ namespace
             case S_RUNIC_LOSS:    return sWorld->getRate(RATE_POWER_RUNICPOWER_LOSS);
             case S_REP_GAIN:      return sWorld->getRate(RATE_REPUTATION_GAIN);
             case S_PUSHBACK:      return 0.0f;
-            case S_GRAVEYARD:     return 0.0f;
             case S_WORLD_CHANNEL: return 1.0f;
             default:              return 0.0f;
         }
@@ -170,6 +174,7 @@ namespace
         float lastRest = -1.0f;        // rest bonus at the last check
         uint32 restTimer = 0;
         uint32 petXpToRemove = 0;      // pet experience to take back (player picked a lower pet rate than the server)
+        time_t graveyardUsed = 0;      // last use of the graveyard button
     };
 
     std::mutex sLock;
@@ -509,8 +514,8 @@ namespace
             AddGossipItemFor(player, GOSSIP_ICON_TALK, Text(player, 11, "Battleground kill experience"), SENDER_PAGE, PAGE_BG);
             AddGossipItemFor(player, GOSSIP_ICON_TALK, Text(player, 12, "Rested experience"), SENDER_PAGE, PAGE_REST);
             AddGossipItemFor(player, GOSSIP_ICON_TALK, Text(player, 13, "Regeneration"), SENDER_PAGE, PAGE_REGEN);
-            if (player->isDead() && OpenWorld(player))
-                AddGossipItemFor(player, GOSSIP_ICON_TAXI, Text(player, 14, "Go to the nearest friendly or neutral graveyard now"), SENDER_GRAVEYARD_NOW, 0);
+            if (cfg.graveyardAlive || cfg.graveyardDead)
+                AddGossipItemFor(player, GOSSIP_ICON_TAXI, Text(player, 14, "Go to the nearest graveyard"), SENDER_GRAVEYARD_NOW, 0);
             AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, 15, "Close"), SENDER_CLOSE, 0);
         }
         else
@@ -576,23 +581,64 @@ namespace
         Changed(player, id);
     }
 
+    // Why the graveyard button can't be used right now, or nullptr when it can.
+    char const* GraveyardBlocked(Player* player, uint32& wait)
+    {
+        wait = 0;
+        bool alive = player->IsAlive();
+        if (alive && !cfg.graveyardAlive)
+            return Text(player, 52, "You can only do this while dead.");
+        if (!alive && !cfg.graveyardDead)
+            return Text(player, 53, "You can only do this while alive.");
+        if (!cfg.graveyardAnywhere && !OpenWorld(player))
+            return Text(player, 49, "You can't do this in instances, battlegrounds or arenas.");
+        if (alive && player->IsInCombat())
+            return Text(player, 54, "You can't do this in combat.");
+        if (alive && (player->IsInFlight() || player->GetTransport()))
+            return Text(player, 55, "You can't do this while flying or on a transport.");
+        if (cfg.graveyardCooldown)
+        {
+            std::lock_guard lock(sLock);
+            if (PlayerData* data = Data(player))
+            {
+                time_t ready = data->graveyardUsed + time_t(cfg.graveyardCooldown);
+                time_t now = GameTime::GetGameTime().count();
+                if (now < ready)
+                {
+                    wait = uint32(ready - now);
+                    return Text(player, 56, "You can use this again in {} seconds.");
+                }
+            }
+        }
+        return nullptr;
+    }
+
     void GoToNearestGraveyard(Player* player)
     {
-        if (!player->isDead() || !OpenWorld(player))
+        uint32 wait;
+        if (char const* why = GraveyardBlocked(player, wait))
         {
-            ChatHandler(player->GetSession()).SendSysMessage(Text(player, 49, "You can only do this while dead, outside instances and battlegrounds."));
+            ChatHandler(player->GetSession()).SendSysMessage(wait ? Acore::StringFormat(why, wait) : std::string(why));
             return;
         }
-        WorldLocation from = player->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? player->GetWorldLocation() : player->GetCorpseLocation();
-        if (from.GetMapId() != player->GetMapId())
-            from = player->GetWorldLocation();
+        WorldLocation from = player->GetWorldLocation();
+        if (!player->IsAlive() && !player->HasPlayerFlag(PLAYER_FLAGS_GHOST) && player->GetCorpseLocation().GetMapId() == player->GetMapId())
+            from = player->GetCorpseLocation();
+        // nearest on this map; instances usually have none, then the graveyard the core would use (outside the entrance)
         GraveyardStruct const* graveyard = NearestGraveyard(player, from);
         if (!graveyard)
+            graveyard = sGraveyard->GetClosestGraveyard(player, player->GetTeamId());
+        if (!graveyard)
         {
-            ChatHandler(player->GetSession()).SendSysMessage(Text(player, 50, "There is no friendly or neutral graveyard on this map."));
+            ChatHandler(player->GetSession()).SendSysMessage(Text(player, 50, "There is no friendly or neutral graveyard near you."));
             return;
         }
-        if (!player->HasPlayerFlag(PLAYER_FLAGS_GHOST))
+        {
+            std::lock_guard lock(sLock);
+            if (PlayerData* data = Data(player))
+                data->graveyardUsed = GameTime::GetGameTime().count();
+        }
+        if (!player->IsAlive() && !player->HasPlayerFlag(PLAYER_FLAGS_GHOST))
             player->BuildPlayerRepop();
         player->TeleportTo(graveyard->Map, graveyard->x, graveyard->y, graveyard->z, player->GetOrientation());
     }
@@ -627,7 +673,7 @@ public:
     TemucraftPlayerSettings_Player() : PlayerScript("TemucraftPlayerSettings_Player", {
         PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_GIVE_EXP,
         PLAYERHOOK_ON_REPUTATION_CHANGE, PLAYERHOOK_ON_GOSSIP_SELECT, PLAYERHOOK_ON_GOSSIP_SELECT_CODE,
-        PLAYERHOOK_ON_BEFORE_CHOOSE_GRAVEYARD, PLAYERHOOK_SHOULD_BE_REWARDED_WITH_MONEY_INSTEAD_OF_EXP,
+        PLAYERHOOK_SHOULD_BE_REWARDED_WITH_MONEY_INSTEAD_OF_EXP,
         PLAYERHOOK_ON_LEVEL_CHANGED }) { }
 
     void OnPlayerLogin(Player* player) override
@@ -743,15 +789,6 @@ public:
         if (ratio != 1.0f)
             standing = std::min<int32>(old + int32(std::lround(gain * ratio)), ReputationMgr::Reputation_Cap);
         return true;
-    }
-
-    void OnPlayerBeforeChooseGraveyard(Player* player, TeamId /*teamId*/, bool nearCorpse, uint32& graveyardOverride) override
-    {
-        if (!cfg.enable || graveyardOverride || !Toggle(player, S_GRAVEYARD) || !OpenWorld(player))
-            return;
-        WorldLocation from = nearCorpse ? player->GetCorpseLocation() : player->GetWorldLocation();
-        if (GraveyardStruct const* graveyard = NearestGraveyard(player, from))
-            graveyardOverride = graveyard->ID;
     }
 
     void OnPlayerGossipSelect(Player* player, uint32 menuId, uint32 sender, uint32 action) override
@@ -882,6 +919,10 @@ public:
         cfg.worldChannelName = sConfigMgr->GetOption<std::string>("Temucraft.PlayerSettings.WorldChannel.Name", "World");
         cfg.regenHealthSpell = sConfigMgr->GetOption<uint32>("Temucraft.PlayerSettings.Regen.Spell1", 1269900);
         cfg.regenPowerSpell = sConfigMgr->GetOption<uint32>("Temucraft.PlayerSettings.Regen.Spell2", 1269901);
+        cfg.graveyardAlive = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Graveyard.Alive", true);
+        cfg.graveyardDead = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Graveyard.Dead", true);
+        cfg.graveyardAnywhere = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Graveyard.Anywhere", true);
+        cfg.graveyardCooldown = sConfigMgr->GetOption<uint32>("Temucraft.PlayerSettings.Graveyard.Cooldown", 0);
 
         float xpMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Max", 3.0f);
         float bgMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Battleground.Max", 3.0f);
