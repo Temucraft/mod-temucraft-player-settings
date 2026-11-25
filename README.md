@@ -14,6 +14,7 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 | Main | Reputation gain | 0 to 2 |
 | Main | Spell pushback | Server default, Vanilla/TBC, Wrath, Retail (no pushback) |
 | Main | Join the World channel at login | on / off |
+| Main | Combat skills always at the maximum for my level | off = level them by use (the normal game) / on = always at max (also `.temucraft settings combatskills max\|use`) |
 | Main | Go to the nearest graveyard | button (also `.temucraft graveyard`); alive or dead, anywhere by default (conf) |
 
 - **Account or character:** the top line of the window says where changes are saved. A character uses its own value,
@@ -34,6 +35,12 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 - Graveyard button: the nearest graveyard on the same map that `graveyard_zone` links to the player's faction or to
   both; where there is none (most instances), the graveyard the core would use. `Temucraft.PlayerSettings.Graveyard.*`
   decides alive / dead / anywhere and a cooldown. Alive players can't use it in combat, flying or on a transport.
+- Combat skills: with the setting on, every weapon skill the character has (Unarmed included) and Defense are raised
+  to their maximum for his level at login, on every level, when he turns it on and when he learns a new weapon skill.
+  Professions, secondary skills, languages and riding are never touched. Turning it off keeps the values he has
+  (they then go up by use again as the level rises). `Temucraft.PlayerSettings.CombatSkills.Max.Default` is what a
+  player who never picked gets; `Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 0` hides the line and gives
+  everybody the server's value. The core's `AlwaysMaxWeaponSkill` (worldserver.conf) still maxes them for everybody.
 - World channel: joined at login. Set `AllowTwoSide.Interaction.Channel = 1` so both factions share it.
 
 ## Install

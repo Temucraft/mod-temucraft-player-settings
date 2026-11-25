@@ -123,3 +123,21 @@ Temucraft.PlayerSettings.Graveyard.Cooldown = 0
 
 Temucraft.PlayerSettings.WorldChannel.Enable = 1
 Temucraft.PlayerSettings.WorldChannel.Name = World
+
+#
+#    Temucraft.PlayerSettings.CombatSkills.Max.Default
+#        Description: Combat skills (every weapon skill, Unarmed and Defense; never professions, secondary skills,
+#                     languages or riding) for a player who never picked:
+#                     0 = they go up as he uses them (the normal game), 1 = always at the maximum for his level.
+#        Default:     0
+
+Temucraft.PlayerSettings.CombatSkills.Max.Default = 0
+
+#
+#    Temucraft.PlayerSettings.CombatSkills.PlayerChoice
+#        Description: 1 = players pick for themselves in the window (or .temucraft settings combatskills max|use).
+#                     0 = the line is hidden and everybody gets CombatSkills.Max.Default.
+#                     Turning "always at max" off never lowers a skill.
+#        Default:     1
+
+Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 1

@@ -17,6 +17,9 @@
 //   Graveyard        a button that takes you to the nearest friendly or neutral graveyard (alive or dead; the
 //                    server decides where and when it works: Temucraft.PlayerSettings.Graveyard.*).
 //   World channel    join the cross-faction World channel at login.
+//   Combat skills    level weapon skills, Defense and Unarmed by use (the normal game) or keep them at the maximum for
+//                    the character's level. Professions, secondary skills, languages and riding are never touched.
+//                    Server default and whether players may change it: Temucraft.PlayerSettings.CombatSkills.*.
 //
 // A value can be saved for the whole account or only for this character. A character uses its own value, then the
 // account's, then the server's (worldserver.conf). Every rate is relative to the server: a player who picks 2 while
@@ -28,6 +31,7 @@
 #include "Chat.h"
 #include "ChatCommand.h"
 #include "Config.h"
+#include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "GameGraveyard.h"
 #include "GameTime.h"
@@ -41,12 +45,14 @@
 #include "ScriptedGossip.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
+#include "SpellMgr.h"
 #include "StringConvert.h"
 #include "TemucraftModuleText.h"
 #include "TemucraftPlayerSettings.h"
 #include "World.h"
 #include "WorldSession.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <mutex>
@@ -68,7 +74,7 @@ namespace
         S_BG_AV, S_BG_WSG, S_BG_AB, S_BG_EOTS, S_BG_SOTA, S_BG_IC,
         S_REST_INGAME, S_REST_TAVERN, S_REST_WILD, S_REST_MAX,
         S_REGEN_HEALTH, S_REGEN_MANA, S_RAGE_LOSS, S_RUNIC_LOSS,
-        S_REP_GAIN, S_PUSHBACK, S_WORLD_CHANNEL,
+        S_REP_GAIN, S_PUSHBACK, S_WORLD_CHANNEL, S_COMBAT_MAX,
         S_COUNT
     };
 
@@ -108,6 +114,7 @@ namespace
         { "rep_gain",      "Reputation gain",                       KIND_NUMBER, PAGE_MAIN,  40 },
         { "pushback",      "Spell pushback",                        KIND_CHOICE, PAGE_MAIN,  41 },
         { "world_channel", "Join the World channel at login",       KIND_TOGGLE, PAGE_MAIN,  43 },
+        { "combat_max",    "Combat skills always at the maximum for my level", KIND_TOGGLE, PAGE_MAIN, 57 },
     } };
 
     std::array<char const*, 4> const PUSHBACK_NAMES = { "Server default", "Vanilla/TBC", "Wrath", "Retail (no pushback)" };
@@ -131,6 +138,8 @@ namespace
         bool graveyardDead = true;       // ... and while dead
         bool graveyardAnywhere = true;   // also in instances, battlegrounds and arenas (otherwise open world only)
         uint32 graveyardCooldown = 0;    // seconds between uses (0 = none)
+        bool combatMaxDefault = false;   // combat skills always at the maximum for the level, for players who never picked
+        bool combatMaxChoice = true;     // players may change it
         std::array<Range, S_COUNT> ranges;
     } cfg;
 
@@ -162,6 +171,7 @@ namespace
             case S_REP_GAIN:      return sWorld->getRate(RATE_REPUTATION_GAIN);
             case S_PUSHBACK:      return 0.0f;
             case S_WORLD_CHANNEL: return 1.0f;
+            case S_COMBAT_MAX:    return cfg.combatMaxDefault ? 1.0f : 0.0f;
             default:              return 0.0f;
         }
     }
@@ -188,8 +198,19 @@ namespace
 
     enum Source : uint8 { SOURCE_SERVER, SOURCE_ACCOUNT, SOURCE_CHARACTER };
 
+    // Whether players may change this setting (otherwise everybody gets the server's value and the line is hidden).
+    bool Offered(uint8 id)
+    {
+        return id != S_COMBAT_MAX || cfg.combatMaxChoice;
+    }
+
     float Value(Player const* player, uint8 id, Source* source = nullptr)
     {
+        if (!Offered(id))
+        {
+            if (source) *source = SOURCE_SERVER;
+            return ServerValue(id);
+        }
         std::lock_guard lock(sLock);
         if (PlayerData const* data = Data(player))
         {
@@ -307,6 +328,40 @@ namespace
         static constexpr std::array<int32, 4> MODES = { -1, 2, 1, 0 };
         uint32 choice = uint32(Value(player, S_PUSHBACK));
         TemucraftSetPlayerPushbackMode(player, MODES[std::min<uint32>(choice, 3)]);
+    }
+
+    // Combat skills: every weapon skill (Unarmed included) and Defense the character has goes to the maximum the
+    // core gives it for his level (the skill's max). Only ever raises a value: switching back to "level by use" keeps
+    // what he has. Professions, secondary skills, languages, riding and other skill lines are not touched.
+    bool IsCombatSkill(SkillLineEntry const* skill)
+    {
+        if (!skill)
+            return false;
+        if (skill->id == SKILL_DEFENSE)
+            return true;
+        return skill->categoryId == SKILL_CATEGORY_WEAPON && !IsProfessionOrRidingSkill(skill->id);
+    }
+
+    void ApplyCombatSkills(Player* player)
+    {
+        if (!Toggle(player, S_COMBAT_MAX))
+            return;
+        bool defense = false;
+        for (uint32 i = 0; i < sSkillLineStore.GetNumRows(); ++i)
+        {
+            SkillLineEntry const* skill = sSkillLineStore.LookupEntry(i);
+            if (!IsCombatSkill(skill) || !player->HasSkill(skill->id))
+                continue;
+            uint16 max = player->GetPureMaxSkillValue(skill->id);
+            uint16 value = player->GetPureSkillValue(skill->id);
+            if (max <= 1 || value >= max)
+                continue;   // max 1 = a skill without levels
+            player->SetSkill(uint16(skill->id), player->GetSkillStep(uint16(skill->id)), max, max);
+            if (skill->id == SKILL_DEFENSE)
+                defense = true;
+        }
+        if (defense)
+            player->UpdateDefenseBonusesMod();
     }
 
     // Regeneration and power loss through two hidden passive auras whose amounts are the player's change in percent.
@@ -506,7 +561,7 @@ namespace
             ? Text(player, 8, "Changes are saved for: |cff0070ddthe whole account|r (click for this character only)")
             : Text(player, 9, "Changes are saved for: |cff0070ddthis character only|r (click for the whole account)"), SENDER_SCOPE, page);
         for (uint8 id = 0; id < S_COUNT; ++id)
-            if (SETTINGS[id].page == page)
+            if (SETTINGS[id].page == page && Offered(id))
                 AddSettingLine(player, id);
         if (page == PAGE_MAIN)
         {
@@ -569,6 +624,7 @@ namespace
             case S_PUSHBACK: ApplyPushback(player); break;
             case S_REGEN_HEALTH: case S_REGEN_MANA: case S_RAGE_LOSS: case S_RUNIC_LOSS: ApplyRegen(player); break;
             case S_REST_MAX: SetRest(player, player->GetRestBonus()); break;
+            case S_COMBAT_MAX: ApplyCombatSkills(player); break;
             default: break;
         }
     }
@@ -674,7 +730,7 @@ public:
         PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_GIVE_EXP,
         PLAYERHOOK_ON_REPUTATION_CHANGE, PLAYERHOOK_ON_GOSSIP_SELECT, PLAYERHOOK_ON_GOSSIP_SELECT_CODE,
         PLAYERHOOK_SHOULD_BE_REWARDED_WITH_MONEY_INSTEAD_OF_EXP,
-        PLAYERHOOK_ON_LEVEL_CHANGED }) { }
+        PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LEARN_SPELL }) { }
 
     void OnPlayerLogin(Player* player) override
     {
@@ -685,6 +741,7 @@ public:
         ApplyRegen(player);
         ApplyOfflineRest(player);
         JoinWorldChannel(player);
+        ApplyCombatSkills(player);
     }
 
     void OnPlayerLogout(Player* player) override
@@ -697,9 +754,21 @@ public:
     {
         if (!cfg.enable)
             return;
-        std::lock_guard lock(sLock);
-        if (PlayerData* data = Data(player))
-            data->lastRest = player->GetRestBonus();
+        {
+            std::lock_guard lock(sLock);
+            if (PlayerData* data = Data(player))
+                data->lastRest = player->GetRestBonus();
+        }
+        ApplyCombatSkills(player);
+    }
+
+    // A new weapon skill (trainer, Defense at level 10 ...) starts at 1: raise it at once.
+    void OnPlayerLearnSpell(Player* player, uint32 spellId) override
+    {
+        if (!cfg.enable || player->GetSession()->PlayerLoading())
+            return;   // while loading, the login does it
+        if (sSpellMgr->GetSpellLearnSkill(spellId))   // a spell that gives a skill line (weapon, Defense ...)
+            ApplyCombatSkills(player);
     }
 
     void OnPlayerUpdate(Player* player, uint32 diff) override
@@ -801,11 +870,11 @@ public:
                 SendPage(player, Page(std::min<uint32>(action, PAGE_REGEN)));
                 return;
             case SENDER_SETTING:
-                if (action < S_COUNT)
+                if (action < S_COUNT && Offered(uint8(action)))
                     SendSetting(player, uint8(action));
                 return;
             case SENDER_TOGGLE:
-                if (action < S_COUNT)
+                if (action < S_COUNT && Offered(uint8(action)))
                 {
                     Set(player, uint8(action), Toggle(player, uint8(action)) ? 0.0f : 1.0f);
                     SendPage(player, SETTINGS[action].page);
@@ -828,7 +897,7 @@ public:
                 return;
             }
             case SENDER_CLEAR:
-                if (action < S_COUNT)
+                if (action < S_COUNT && Offered(uint8(action)))
                 {
                     Set(player, uint8(action), std::nullopt);
                     SendSetting(player, uint8(action));
@@ -883,6 +952,7 @@ public:
         static ChatCommandTable commandTable =
         {
             { "temucraft settings", HandleSettings, 103850, Console::No },
+            { "temucraft settings combatskills", HandleCombatSkills, 103850, Console::No },
             { "temucraft graveyard", HandleGraveyard, 103851, Console::No },
         };
         return commandTable;
@@ -896,6 +966,43 @@ public:
             return true;
         }
         SendPage(handler->GetSession()->GetPlayer(), PAGE_MAIN);
+        return true;
+    }
+
+    // .temucraft settings combatskills [max | use]: without a word, says what it does and opens the window.
+    static bool HandleCombatSkills(ChatHandler* handler, Optional<std::string> choice)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        if (!cfg.enable)
+        {
+            handler->SendSysMessage(TemucraftModuleText(MODULE, handler, 1, "Player settings are off on this server."));
+            return true;
+        }
+        if (!cfg.combatMaxChoice)
+        {
+            handler->SendSysMessage(Toggle(player, S_COMBAT_MAX)
+                ? Text(player, 58, "On this server your combat skills are always at the maximum for your level.")
+                : Text(player, 59, "On this server your combat skills go up as you use them."));
+            return true;
+        }
+        if (choice)
+        {
+            std::string word = *choice;
+            std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+            if (word == "max" || word == "on" || word == "1")
+                Set(player, S_COMBAT_MAX, 1.0f);
+            else if (word == "use" || word == "off" || word == "0")
+                Set(player, S_COMBAT_MAX, 0.0f);
+            else
+            {
+                handler->SendSysMessage(Text(player, 60, "Type max (always at the maximum for your level) or use (level them by using them)."));
+                return true;
+            }
+        }
+        handler->SendSysMessage(Text(player, 61, "Combat skills are your weapon skills, Unarmed and Defense. Off: they go up as you use them (the normal game). On: they are always at the maximum for your level. Professions are never changed. Turning it off keeps what you have."));
+        handler->SendSysMessage(ValueText(player, S_COMBAT_MAX));
+        if (!choice)
+            SendPage(player, PAGE_MAIN);
         return true;
     }
 
@@ -923,6 +1030,8 @@ public:
         cfg.graveyardDead = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Graveyard.Dead", true);
         cfg.graveyardAnywhere = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Graveyard.Anywhere", true);
         cfg.graveyardCooldown = sConfigMgr->GetOption<uint32>("Temucraft.PlayerSettings.Graveyard.Cooldown", 0);
+        cfg.combatMaxDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.CombatSkills.Max.Default", false);
+        cfg.combatMaxChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.CombatSkills.PlayerChoice", true);
 
         float xpMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Max", 3.0f);
         float bgMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Battleground.Max", 3.0f);
