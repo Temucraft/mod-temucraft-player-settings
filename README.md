@@ -68,6 +68,10 @@ Every player picks his own rates and options in one window. Open it with `.temuc
   New spider displays: run `python3 tools/make_arachnophobia_sql.py <CreatureDisplayInfo.dbc> <CreatureModelData.dbc>
   data/sql/db-world/base/mod_temucraft_arachnophobia.sql` again.
 - World channel: joined at login. Set `AllowTwoSide.Interaction.Channel = 1` so both factions share it.
+- Deleted characters: a character deleted for good (`OnPlayerDeleteFromDB`, in the same transaction as the core's own deletes; not a `CharDelete.Method = 1` unlink, which can be restored)
+  takes its own settings with it (`mod_temucraft_player_settings` rows with `scope` 1); the account's rows (`scope` 0)
+  stay. `data/sql/db-characters/base/mod_temucraft_player_settings_character_cleanup.sql` removes rows of characters
+  deleted before; safe to run again.
 
 ## Install
 
