@@ -143,6 +143,56 @@ Temucraft.PlayerSettings.CombatSkills.Max.Default = 0
 Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 1
 
 #
+#    Temucraft.PlayerSettings.TeleportConfirm.Default
+#        Description: "Ask before teleports and portals" for a player who never picked: 1 = a gossip line, portal
+#                     (city, dungeon, mage portal) or other object that moves him first shows "Teleport to: <where>"
+#                     with Accept and Cancel; 0 = it works at once. mod-temucraft shows the prompts;
+#                     Temucraft.Portals.Confirm = 0 there turns them off for everybody.
+#        Default:     1
+
+Temucraft.PlayerSettings.TeleportConfirm.Default = 1
+
+#
+#    Temucraft.PlayerSettings.TeleportConfirm.PlayerChoice
+#        Description: 1 = players pick for themselves (window, .temucraft settings prompts teleports on|off, or the
+#                     Temucraft Concierge). 0 = the line is hidden and everybody gets TeleportConfirm.Default.
+#        Default:     1
+
+Temucraft.PlayerSettings.TeleportConfirm.PlayerChoice = 1
+
+#
+#    Temucraft.PlayerSettings.ChestConfirm.Default
+#        Description: "Ask before opening chests" for a player who never picked: 1 = clicking a chest first shows
+#                     "Open: <chest>" with Accept and Cancel (herbs, ore, fishing and quest objects never ask);
+#                     0 = it opens at once. Temucraft.Chests.Confirm = 0 (mod-temucraft) turns it off for everybody.
+#        Default:     0
+
+Temucraft.PlayerSettings.ChestConfirm.Default = 0
+
+#
+#    Temucraft.PlayerSettings.ChestConfirm.PlayerChoice
+#        Description: 1 = players pick for themselves. 0 = the line is hidden and everybody gets ChestConfirm.Default.
+#        Default:     1
+
+Temucraft.PlayerSettings.ChestConfirm.PlayerChoice = 1
+
+#
+#    Temucraft.PlayerSettings.PromptReminder.Default
+#        Description: "Remind me that prompts can be turned off" for a player who never picked: 1 = the first prompt
+#                     after each login also says in chat that it can be turned off (once per login, teleports and
+#                     chests each); 0 = no chat line.
+#        Default:     1
+
+Temucraft.PlayerSettings.PromptReminder.Default = 1
+
+#
+#    Temucraft.PlayerSettings.PromptReminder.PlayerChoice
+#        Description: 1 = players pick for themselves. 0 = the line is hidden and everybody gets PromptReminder.Default.
+#        Default:     1
+
+Temucraft.PlayerSettings.PromptReminder.PlayerChoice = 1
+
+#
 #    Temucraft.PlayerSettings.Arachnophobia.Default
 #        Description: Arachnophobia Mode for a player who never picked: 1 = spiders, nerubians and spider mounts are
 #                     shown to him as crabs, makrura, wasps and a crab mount (only to him; nothing in the game changes).

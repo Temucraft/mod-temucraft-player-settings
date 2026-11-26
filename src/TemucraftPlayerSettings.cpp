@@ -22,6 +22,11 @@
 //                    Server default and whether players may change it: Temucraft.PlayerSettings.CombatSkills.*.
 //   Arachnophobia    see spiders as crabs, nerubians as makrura ... (TemucraftArachnophobia.cpp swaps the models in
 //                    the packets sent to that player only). Temucraft.PlayerSettings.Arachnophobia.*.
+//   Prompts          ask before a teleport or portal ("Teleport to: <where>" Accept/Cancel), ask before opening a
+//                    chest, and a once-per-login chat line saying the prompts can be turned off. Stored on the player
+//                    for mod-temucraft, which shows the prompts (TemucraftPlayerSettings.h). Server defaults and
+//                    whether players may change them: Temucraft.PlayerSettings.TeleportConfirm.* / ChestConfirm.* /
+//                    PromptReminder.*.
 //
 // A value can be saved for the whole account or only for this character. A character uses its own value, then the
 // account's, then the server's (worldserver.conf). Every rate is relative to the server: a player who picks 2 while
@@ -78,6 +83,7 @@ namespace
         S_REST_INGAME, S_REST_TAVERN, S_REST_WILD, S_REST_MAX,
         S_REGEN_HEALTH, S_REGEN_MANA, S_RAGE_LOSS, S_RUNIC_LOSS,
         S_REP_GAIN, S_PUSHBACK, S_WORLD_CHANNEL, S_COMBAT_MAX,
+        S_PROMPT_TELEPORT, S_PROMPT_CHEST, S_PROMPT_REMIND,
         S_ARACHNOPHOBIA,
         S_COUNT
     };
@@ -119,6 +125,9 @@ namespace
         { "pushback",      "Spell pushback",                        KIND_CHOICE, PAGE_MAIN,  41 },
         { "world_channel", "Join the World channel at login",       KIND_TOGGLE, PAGE_MAIN,  43 },
         { "combat_max",    "Combat skills always at the maximum for my level", KIND_TOGGLE, PAGE_MAIN, 57 },
+        { "prompt_teleport", "Ask before teleports and portals",   KIND_TOGGLE, PAGE_MAIN,  62 },
+        { "prompt_chest",  "Ask before opening chests",             KIND_TOGGLE, PAGE_MAIN,  63 },
+        { "prompt_remind", "Remind me that prompts can be turned off", KIND_TOGGLE, PAGE_MAIN, 64 },
         { "arachnophobia", "Arachnophobia Mode (spiders look like crabs)", KIND_TOGGLE, PAGE_MAIN, 80 },
     } };
 
@@ -145,6 +154,12 @@ namespace
         uint32 graveyardCooldown = 0;    // seconds between uses (0 = none)
         bool combatMaxDefault = false;   // combat skills always at the maximum for the level, for players who never picked
         bool combatMaxChoice = true;     // players may change it
+        bool teleportConfirmDefault = true;   // ask before teleports and portals, for players who never picked
+        bool teleportConfirmChoice = true;
+        bool chestConfirmDefault = false;     // ask before opening chests
+        bool chestConfirmChoice = true;
+        bool promptReminderDefault = true;    // say once per login that the prompts can be turned off
+        bool promptReminderChoice = true;
         bool arachnophobiaDefault = false;   // Arachnophobia Mode for players who never picked
         bool arachnophobiaChoice = true;     // players may change it
         std::array<Range, S_COUNT> ranges;
@@ -179,6 +194,9 @@ namespace
             case S_PUSHBACK:      return 0.0f;
             case S_WORLD_CHANNEL: return 1.0f;
             case S_COMBAT_MAX:    return cfg.combatMaxDefault ? 1.0f : 0.0f;
+            case S_PROMPT_TELEPORT: return cfg.teleportConfirmDefault ? 1.0f : 0.0f;
+            case S_PROMPT_CHEST:  return cfg.chestConfirmDefault ? 1.0f : 0.0f;
+            case S_PROMPT_REMIND: return cfg.promptReminderDefault ? 1.0f : 0.0f;
             case S_ARACHNOPHOBIA: return cfg.arachnophobiaDefault ? 1.0f : 0.0f;
             default:              return 0.0f;
         }
@@ -211,7 +229,14 @@ namespace
     {
         if (id == S_ARACHNOPHOBIA)
             return cfg.arachnophobiaChoice;
-        return id != S_COMBAT_MAX || cfg.combatMaxChoice;
+        switch (id)
+        {
+            case S_COMBAT_MAX:      return cfg.combatMaxChoice;
+            case S_PROMPT_TELEPORT: return cfg.teleportConfirmChoice;
+            case S_PROMPT_CHEST:    return cfg.chestConfirmChoice;
+            case S_PROMPT_REMIND:   return cfg.promptReminderChoice;
+            default:                return true;
+        }
     }
 
     float Value(Player const* player, uint8 id, Source* source = nullptr)
@@ -372,6 +397,12 @@ namespace
         }
         if (defense)
             player->UpdateDefenseBonusesMod();
+    }
+
+    // Prompts: mod-temucraft reads them from the player (TemucraftPlayerSettings.h).
+    void ApplyPrompts(Player* player)
+    {
+        TemucraftSetPromptChoices(player, Toggle(player, S_PROMPT_TELEPORT), Toggle(player, S_PROMPT_CHEST), Toggle(player, S_PROMPT_REMIND));
     }
 
     // Regeneration and power loss through two hidden passive auras whose amounts are the player's change in percent.
@@ -580,7 +611,8 @@ namespace
             AddGossipItemFor(player, GOSSIP_ICON_TALK, Text(player, 12, "Rested experience"), SENDER_PAGE, PAGE_REST);
             AddGossipItemFor(player, GOSSIP_ICON_TALK, Text(player, 13, "Regeneration"), SENDER_PAGE, PAGE_REGEN);
             if (cfg.graveyardAlive || cfg.graveyardDead)
-                AddGossipItemFor(player, GOSSIP_ICON_TAXI, Text(player, 14, "Go to the nearest graveyard"), SENDER_GRAVEYARD_NOW, 0);
+                AddGossipItemFor(player, GOSSIP_ICON_TAXI, Text(player, 14, "Go to the nearest graveyard"), SENDER_GRAVEYARD_NOW, 0,
+                    TemucraftTeleportBox(player, Text(player, 65, "the nearest graveyard")), 0, false);
             AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, 15, "Close"), SENDER_CLOSE, 0);
         }
         else
@@ -635,6 +667,7 @@ namespace
             case S_REGEN_HEALTH: case S_REGEN_MANA: case S_RAGE_LOSS: case S_RUNIC_LOSS: ApplyRegen(player); break;
             case S_REST_MAX: SetRest(player, player->GetRestBonus()); break;
             case S_COMBAT_MAX: ApplyCombatSkills(player); break;
+            case S_PROMPT_TELEPORT: case S_PROMPT_CHEST: case S_PROMPT_REMIND: ApplyPrompts(player); break;
             case S_ARACHNOPHOBIA: TemucraftArachnophobiaSet(player, Toggle(player, S_ARACHNOPHOBIA)); break;
             default: break;
         }
@@ -754,6 +787,7 @@ public:
         JoinWorldChannel(player);
         TemucraftArachnophobiaSet(player, Toggle(player, S_ARACHNOPHOBIA));
         ApplyCombatSkills(player);
+        ApplyPrompts(player);
     }
 
     void OnPlayerLogout(Player* player) override
@@ -966,6 +1000,7 @@ public:
             { "temucraft settings", HandleSettings, 103850, Console::No },
             { "temucraft settings combatskills", HandleCombatSkills, 103850, Console::No },
             { "temucraft settings arachnophobia", HandleArachnophobia, 103850, Console::No },
+            { "temucraft settings prompts", HandlePrompts, 103850, Console::No },
             { "temucraft graveyard", HandleGraveyard, 103851, Console::No },
         };
         return commandTable;
@@ -1016,6 +1051,53 @@ public:
         handler->SendSysMessage(ValueText(player, S_COMBAT_MAX));
         if (!choice)
             SendPage(player, PAGE_MAIN);
+        return true;
+    }
+
+    // .temucraft settings prompts [teleports | chests | reminder] [on | off]: without words, says what they do, shows
+    // the three values and opens the window.
+    static bool HandlePrompts(ChatHandler* handler, Optional<std::string> which, Optional<std::string> onOff)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        if (!cfg.enable)
+        {
+            handler->SendSysMessage(TemucraftModuleText(MODULE, handler, 1, "Player settings are off on this server."));
+            return true;
+        }
+        if (which)
+        {
+            std::string word = *which;
+            std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+            uint8 id = S_COUNT;
+            if (word == "teleports" || word == "teleport" || word == "portals" || word == "portal")
+                id = S_PROMPT_TELEPORT;
+            else if (word == "chests" || word == "chest")
+                id = S_PROMPT_CHEST;
+            else if (word == "reminder" || word == "remind")
+                id = S_PROMPT_REMIND;
+            std::string value = onOff ? *onOff : "";
+            std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+            bool on = value == "on" || value == "1", off = value == "off" || value == "0";
+            if (id == S_COUNT || (!on && !off))
+            {
+                handler->SendSysMessage(Text(player, 66, "Type teleports, chests or reminder, then on or off. Example: .temucraft settings prompts teleports off"));
+                return true;
+            }
+            if (!Offered(id))
+            {
+                handler->SendSysMessage(Text(player, 67, "The server decides this one."));
+                handler->SendSysMessage(ValueText(player, id));
+                return true;
+            }
+            Set(player, id, on ? 1.0f : 0.0f);
+            handler->SendSysMessage(ValueText(player, id));
+            return true;
+        }
+        handler->SendSysMessage(Text(player, 68, "Prompts: before a teleport or portal (gossip lines, city and dungeon portals, mage portals) you get \"Teleport to: <where>\" with Accept and Cancel; chests can ask \"Open: <chest>\" too. Turned off, they work at once."));
+        handler->SendSysMessage(ValueText(player, S_PROMPT_TELEPORT));
+        handler->SendSysMessage(ValueText(player, S_PROMPT_CHEST));
+        handler->SendSysMessage(ValueText(player, S_PROMPT_REMIND));
+        SendPage(player, PAGE_MAIN);
         return true;
     }
 
@@ -1097,6 +1179,12 @@ public:
         cfg.combatMaxChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.CombatSkills.PlayerChoice", true);
         cfg.arachnophobiaDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Arachnophobia.Default", false);
         cfg.arachnophobiaChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Arachnophobia.PlayerChoice", true);
+        cfg.teleportConfirmDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.TeleportConfirm.Default", true);
+        cfg.teleportConfirmChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.TeleportConfirm.PlayerChoice", true);
+        cfg.chestConfirmDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.ChestConfirm.Default", false);
+        cfg.chestConfirmChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.ChestConfirm.PlayerChoice", true);
+        cfg.promptReminderDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.PromptReminder.Default", true);
+        cfg.promptReminderChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.PromptReminder.PlayerChoice", true);
 
         float xpMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Max", 3.0f);
         float bgMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Battleground.Max", 3.0f);

@@ -16,6 +16,9 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 | Main | Join the World channel at login | on / off |
 | Main | Combat skills always at the maximum for my level | off = level them by use (the normal game) / on = always at max (also `.temucraft settings combatskills max\|use`) |
 | Main | Arachnophobia Mode (spiders look like crabs) | off (default) / on: spiders, nerubians, crypt fiends and spider mounts are shown as crabs, makrura, wasps and a crab mount, only to you (also `.temucraft settings arachnophobia on\|off`) |
+| Main | Ask before teleports and portals | on (default) / off: "Teleport to: <where>" Accept/Cancel before gossip teleports, city, dungeon and mage portals (also `.temucraft settings prompts teleports on\|off`) |
+| Main | Ask before opening chests | off (default) / on: "Open: <chest>" Accept/Cancel (`.temucraft settings prompts chests on\|off`) |
+| Main | Remind me that prompts can be turned off | on (default) / off: one chat line per login at the first prompt (`.temucraft settings prompts reminder on\|off`) |
 | Main | Go to the nearest graveyard | button (also `.temucraft graveyard`); alive or dead, anywhere by default (conf) |
 
 - **Account or character:** the top line of the window says where changes are saved. A character uses its own value,
@@ -42,6 +45,12 @@ Every player picks his own rates and options in one window. Open it with `.temuc
   (they then go up by use again as the level rises). `Temucraft.PlayerSettings.CombatSkills.Max.Default` is what a
   player who never picked gets; `Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 0` hides the line and gives
   everybody the server's value. The core's `AlwaysMaxWeaponSkill` (worldserver.conf) still maxes them for everybody.
+- Prompts: the three choices are stored on the player at login and on every change (`TemucraftPlayerSettings.h`);
+  mod-temucraft shows the prompts (its `TemucraftPrompts.cpp` and README) and the modules with teleport menus use
+  the same header. Turned off, gossip lines come without the popup and portals work at once. Defaults and whether
+  players may change them: `Temucraft.PlayerSettings.TeleportConfirm.*`, `.ChestConfirm.*`, `.PromptReminder.*`
+  (`PlayerChoice = 0` hides the line and gives everybody the default). The graveyard button asks too
+  ("Teleport to: the nearest graveyard"); the typed `.temucraft graveyard` doesn't.
 - Arachnophobia Mode (like retail's Accessibility option): `TemucraftArachnophobia.cpp`. When the server builds a
   unit's values for a player who has it on (`UnitScript::OnPatchValuesUpdate`, no core change), the display id, native
   display id and mount display id are replaced from the world table `mod_temucraft_arachnophobia`, and the object
