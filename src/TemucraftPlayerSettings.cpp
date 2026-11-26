@@ -20,6 +20,8 @@
 //   Combat skills    level weapon skills, Defense and Unarmed by use (the normal game) or keep them at the maximum for
 //                    the character's level. Professions, secondary skills, languages and riding are never touched.
 //                    Server default and whether players may change it: Temucraft.PlayerSettings.CombatSkills.*.
+//   Arachnophobia    see spiders as crabs, nerubians as makrura ... (TemucraftArachnophobia.cpp swaps the models in
+//                    the packets sent to that player only). Temucraft.PlayerSettings.Arachnophobia.*.
 //
 // A value can be saved for the whole account or only for this character. A character uses its own value, then the
 // account's, then the server's (worldserver.conf). Every rate is relative to the server: a player who picks 2 while
@@ -47,6 +49,7 @@
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "StringConvert.h"
+#include "TemucraftArachnophobia.h"
 #include "TemucraftModuleText.h"
 #include "TemucraftPlayerSettings.h"
 #include "World.h"
@@ -75,6 +78,7 @@ namespace
         S_REST_INGAME, S_REST_TAVERN, S_REST_WILD, S_REST_MAX,
         S_REGEN_HEALTH, S_REGEN_MANA, S_RAGE_LOSS, S_RUNIC_LOSS,
         S_REP_GAIN, S_PUSHBACK, S_WORLD_CHANNEL, S_COMBAT_MAX,
+        S_ARACHNOPHOBIA,
         S_COUNT
     };
 
@@ -115,6 +119,7 @@ namespace
         { "pushback",      "Spell pushback",                        KIND_CHOICE, PAGE_MAIN,  41 },
         { "world_channel", "Join the World channel at login",       KIND_TOGGLE, PAGE_MAIN,  43 },
         { "combat_max",    "Combat skills always at the maximum for my level", KIND_TOGGLE, PAGE_MAIN, 57 },
+        { "arachnophobia", "Arachnophobia Mode (spiders look like crabs)", KIND_TOGGLE, PAGE_MAIN, 80 },
     } };
 
     std::array<char const*, 4> const PUSHBACK_NAMES = { "Server default", "Vanilla/TBC", "Wrath", "Retail (no pushback)" };
@@ -140,6 +145,8 @@ namespace
         uint32 graveyardCooldown = 0;    // seconds between uses (0 = none)
         bool combatMaxDefault = false;   // combat skills always at the maximum for the level, for players who never picked
         bool combatMaxChoice = true;     // players may change it
+        bool arachnophobiaDefault = false;   // Arachnophobia Mode for players who never picked
+        bool arachnophobiaChoice = true;     // players may change it
         std::array<Range, S_COUNT> ranges;
     } cfg;
 
@@ -172,6 +179,7 @@ namespace
             case S_PUSHBACK:      return 0.0f;
             case S_WORLD_CHANNEL: return 1.0f;
             case S_COMBAT_MAX:    return cfg.combatMaxDefault ? 1.0f : 0.0f;
+            case S_ARACHNOPHOBIA: return cfg.arachnophobiaDefault ? 1.0f : 0.0f;
             default:              return 0.0f;
         }
     }
@@ -201,6 +209,8 @@ namespace
     // Whether players may change this setting (otherwise everybody gets the server's value and the line is hidden).
     bool Offered(uint8 id)
     {
+        if (id == S_ARACHNOPHOBIA)
+            return cfg.arachnophobiaChoice;
         return id != S_COMBAT_MAX || cfg.combatMaxChoice;
     }
 
@@ -625,6 +635,7 @@ namespace
             case S_REGEN_HEALTH: case S_REGEN_MANA: case S_RAGE_LOSS: case S_RUNIC_LOSS: ApplyRegen(player); break;
             case S_REST_MAX: SetRest(player, player->GetRestBonus()); break;
             case S_COMBAT_MAX: ApplyCombatSkills(player); break;
+            case S_ARACHNOPHOBIA: TemucraftArachnophobiaSet(player, Toggle(player, S_ARACHNOPHOBIA)); break;
             default: break;
         }
     }
@@ -741,6 +752,7 @@ public:
         ApplyRegen(player);
         ApplyOfflineRest(player);
         JoinWorldChannel(player);
+        TemucraftArachnophobiaSet(player, Toggle(player, S_ARACHNOPHOBIA));
         ApplyCombatSkills(player);
     }
 
@@ -953,6 +965,7 @@ public:
         {
             { "temucraft settings", HandleSettings, 103850, Console::No },
             { "temucraft settings combatskills", HandleCombatSkills, 103850, Console::No },
+            { "temucraft settings arachnophobia", HandleArachnophobia, 103850, Console::No },
             { "temucraft graveyard", HandleGraveyard, 103851, Console::No },
         };
         return commandTable;
@@ -1006,6 +1019,56 @@ public:
         return true;
     }
 
+    // Always plain English "Arachnophobia Mode: on" / "off" (never translated): the client's Options window reads this
+    // line to know the server has the setting and what it is.
+    static std::string ArachnophobiaStatus(Player* player)
+    {
+        Source source;
+        bool on = Value(player, S_ARACHNOPHOBIA, &source) >= 0.5f;
+        return Acore::StringFormat("Arachnophobia Mode: {} ({})", on ? "on" : "off", SourceText(player, source));
+    }
+
+    // .temucraft settings arachnophobia [on | off]: without a word, says what it does and shows the value. The client's
+    // Options window (Accessibility > General > Arachnophobia Mode) sends it with on or off (whispered to the player
+    // himself: commands are read before a whisper is sent) and without a word to ask for the value.
+    static bool HandleArachnophobia(ChatHandler* handler, Optional<std::string> choice)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        if (!cfg.enable)
+        {
+            handler->SendSysMessage(TemucraftModuleText(MODULE, handler, 1, "Player settings are off on this server."));
+            return true;
+        }
+        if (!TemucraftArachnophobiaDisplayCount())
+        {
+            handler->SendSysMessage(Text(player, 81, "Arachnophobia Mode is not set up on this server (the world table mod_temucraft_arachnophobia is missing)."));
+            return true;
+        }
+        if (choice)
+        {
+            std::string word = *choice;
+            std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+            bool on = word == "on" || word == "1", off = word == "off" || word == "0";
+            if (!on && !off)
+            {
+                handler->SendSysMessage(Text(player, 82, "Type on or off. Example: .temucraft settings arachnophobia on"));
+                return true;
+            }
+            if (!Offered(S_ARACHNOPHOBIA))
+            {
+                handler->SendSysMessage(Text(player, 83, "The server decides this one."));
+                handler->SendSysMessage(ArachnophobiaStatus(player));
+                return true;
+            }
+            Set(player, S_ARACHNOPHOBIA, on ? 1.0f : 0.0f);
+            handler->SendSysMessage(ArachnophobiaStatus(player));
+            return true;
+        }
+        handler->SendSysMessage(Text(player, 84, "Arachnophobia Mode: spiders look like crabs, giant spiders like big crabs, mechanical spiders like hermit crabs, nerubians and crypt fiends like makrura, flying nerubians like wasps and spider mounts like a crab mount. Only you see it; it changes nothing in the game."));
+        handler->SendSysMessage(ArachnophobiaStatus(player));
+        return true;
+    }
+
     static bool HandleGraveyard(ChatHandler* handler)
     {
         if (cfg.enable)
@@ -1032,6 +1095,8 @@ public:
         cfg.graveyardCooldown = sConfigMgr->GetOption<uint32>("Temucraft.PlayerSettings.Graveyard.Cooldown", 0);
         cfg.combatMaxDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.CombatSkills.Max.Default", false);
         cfg.combatMaxChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.CombatSkills.PlayerChoice", true);
+        cfg.arachnophobiaDefault = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Arachnophobia.Default", false);
+        cfg.arachnophobiaChoice = sConfigMgr->GetOption<bool>("Temucraft.PlayerSettings.Arachnophobia.PlayerChoice", true);
 
         float xpMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Max", 3.0f);
         float bgMax = sConfigMgr->GetOption<float>("Temucraft.PlayerSettings.XP.Battleground.Max", 3.0f);

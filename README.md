@@ -15,6 +15,7 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 | Main | Spell pushback | Server default, Vanilla/TBC, Wrath, Retail (no pushback) |
 | Main | Join the World channel at login | on / off |
 | Main | Combat skills always at the maximum for my level | off = level them by use (the normal game) / on = always at max (also `.temucraft settings combatskills max\|use`) |
+| Main | Arachnophobia Mode (spiders look like crabs) | off (default) / on: spiders, nerubians, crypt fiends and spider mounts are shown as crabs, makrura, wasps and a crab mount, only to you (also `.temucraft settings arachnophobia on\|off`) |
 | Main | Go to the nearest graveyard | button (also `.temucraft graveyard`); alive or dead, anywhere by default (conf) |
 
 - **Account or character:** the top line of the window says where changes are saved. A character uses its own value,
@@ -41,6 +42,22 @@ Every player picks his own rates and options in one window. Open it with `.temuc
   (they then go up by use again as the level rises). `Temucraft.PlayerSettings.CombatSkills.Max.Default` is what a
   player who never picked gets; `Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 0` hides the line and gives
   everybody the server's value. The core's `AlwaysMaxWeaponSkill` (worldserver.conf) still maxes them for everybody.
+- Arachnophobia Mode (like retail's Accessibility option): `TemucraftArachnophobia.cpp`. When the server builds a
+  unit's values for a player who has it on (`UnitScript::OnPatchValuesUpdate`, no core change), the display id, native
+  display id and mount display id are replaced from the world table `mod_temucraft_arachnophobia`, and the object
+  scale sent to him is multiplied by the row's `scale`, so the crab is as big as the spider was. Only his packets
+  change: everybody else sees the spider, and the creature's real size, reach, hit box and spells stay the same.
+  Groups (made from the model paths in the DBCs by `tools/make_arachnophobia_sql.py`): spiders (bone, crystal, fire,
+  lava, shale, spider demons, spiderlings) -> crabs; giant spiders, tarantulas, Beth'tilac-type bosses -> big (deep sea)
+  crabs; mechanical spiders (spider tanks, mechanical spider pets) -> hermit crab; nerubians, crypt fiends, crypt lords,
+  dryders -> makrura (lobstrok); flying nerubians -> wasps (no skitterfly in 3.3.5); spider mounts -> crab mount.
+  It covers everything that is a unit: creatures, bosses, companion and hunter pets, players in a spider form, mounts.
+  Not: webs, spell effects, icons, loading screens, the model in the companion/mount journal and portraits drawn from
+  the creature cache. Turning it on or off sends the swapped units in view again, so they change at once.
+  `Temucraft.PlayerSettings.Arachnophobia.Default` / `.PlayerChoice`. The client's Options window (Accessibility >
+  General) sends `.temucraft settings arachnophobia on|off` and reads the plain reply "Arachnophobia Mode: on|off".
+  New spider displays: run `python3 tools/make_arachnophobia_sql.py <CreatureDisplayInfo.dbc> <CreatureModelData.dbc>
+  data/sql/db-world/base/mod_temucraft_arachnophobia.sql` again.
 - World channel: joined at login. Set `AllowTwoSide.Interaction.Channel = 1` so both factions share it.
 
 ## Install
@@ -53,4 +70,4 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 
 ## Ids
 
-- Player gossip menu 1269900. RBAC 103850-103899 (103850 settings, 103851 graveyard). Spells 1269900-1269901.
+- Player gossip menu 1269900. RBAC 103850-103899 (103850 settings, 103851 graveyard). Spells 1269900-1269901. World table `mod_temucraft_arachnophobia`. Texts (module_string) 80-84 are Arachnophobia Mode.

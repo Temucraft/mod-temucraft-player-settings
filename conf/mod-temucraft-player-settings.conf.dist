@@ -141,3 +141,20 @@ Temucraft.PlayerSettings.CombatSkills.Max.Default = 0
 #        Default:     1
 
 Temucraft.PlayerSettings.CombatSkills.PlayerChoice = 1
+
+#
+#    Temucraft.PlayerSettings.Arachnophobia.Default
+#        Description: Arachnophobia Mode for a player who never picked: 1 = spiders, nerubians and spider mounts are
+#                     shown to him as crabs, makrura, wasps and a crab mount (only to him; nothing in the game changes).
+#                     Needs the world table mod_temucraft_arachnophobia (data/sql/db-world).
+#        Default:     0
+
+Temucraft.PlayerSettings.Arachnophobia.Default = 0
+
+#
+#    Temucraft.PlayerSettings.Arachnophobia.PlayerChoice
+#        Description: 1 = players pick for themselves (window, .temucraft settings arachnophobia on|off, the client's
+#                     Options window). 0 = the line is hidden and everybody gets Arachnophobia.Default.
+#        Default:     1
+
+Temucraft.PlayerSettings.Arachnophobia.PlayerChoice = 1
