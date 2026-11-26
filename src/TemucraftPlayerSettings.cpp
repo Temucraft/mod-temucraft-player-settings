@@ -1218,9 +1218,24 @@ public:
     }
 };
 
+// a deleted character's own settings (scope 1) go with it; the account's (scope 0) stay
+// OnPlayerDeleteFromDB: only when the character is really removed (not a CharDelete.Method = 1 unlink, which can be
+// restored), and in the same transaction as the core's own deletes.
+class TemucraftPlayerSettings_Delete : public PlayerScript
+{
+public:
+    TemucraftPlayerSettings_Delete() : PlayerScript("TemucraftPlayerSettings_Delete", { PLAYERHOOK_ON_DELETE_FROM_DB }) { }
+
+    void OnPlayerDeleteFromDB(CharacterDatabaseTransaction trans, uint32 guid) override
+    {
+        trans->Append("DELETE FROM `mod_temucraft_player_settings` WHERE `scope` = 1 AND `owner` = {}", guid);
+    }
+};
+
 void AddTemucraftPlayerSettingsScripts()
 {
     new TemucraftPlayerSettings_Player();
     new TemucraftPlayerSettings_Command();
     new TemucraftPlayerSettings_World();
+    new TemucraftPlayerSettings_Delete();
 }
