@@ -84,3 +84,9 @@ Every player picks his own rates and options in one window. Open it with `.temuc
 ## Ids
 
 - Player gossip menu 1269900. RBAC 103850-103899 (103850 settings, 103851 graveyard). Spells 1269900-1269901. World table `mod_temucraft_arachnophobia`. Texts (module_string) 80-84 are Arachnophobia Mode.
+
+## Shared headers
+
+`TemucraftPlayerSettings.h` and `TemucraftModuleText.h` in `src/` are shared with other Temucraft modules and must stay the same everywhere (all modules
+share one include path). `_tools\check_shared_headers.py` checks the copies (`--fix` copies the canonical one over
+them). This module holds the canonical `TemucraftPlayerSettings.h`; the canonical `TemucraftModuleText.h` is in mod-temucraft. Change the canonical copy, then run the check with `--fix`.
